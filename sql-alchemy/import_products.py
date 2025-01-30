@@ -6,13 +6,26 @@ from db import (
 )
 from models import(
     Product,
-    Manufacturer
+    Manufacturer,
+    Country,
+    ProductCountry
 )
+from sqlalchemy import delete
 from sqlalchemy.exc import SQLAlchemyError
 
 def main(csv_file: str):
-    Model.metadata.drop_all(engine) # This deletes all data
-    Model.metadata.create_all(engine)
+    # These are no longer needed since we have moved to Alembic migrations
+    # Model.metadata.drop_all(engine) # This deletes all data
+    # Model.metadata.create_all(engine)
+    
+    # attempt to delete all the rows in all the tables, so that it can import them again from the CSV file
+    with Session() as session:
+        with session.begin():
+            session.execute(delete(ProductCountry))
+            session.execute(delete(Product))
+            session.execute(delete(Manufacturer))
+            session.execute(delete(Country))
+            
     
     try:
         # Start a database session using the double context manager method, so
@@ -24,6 +37,7 @@ def main(csv_file: str):
                 with open(csv_file) as f:
                     reader= csv.DictReader(f)
                     all_manufacturers = {}
+                    all_countries= {}
                     
                     for row in reader:
                         
@@ -38,6 +52,7 @@ def main(csv_file: str):
 
                         row['year']= int(row['year'])
                         manufacturer = row.pop('manufacturer')
+                        countries= row.pop('country').split('/')
                         p= Product(**row)
                         
                         # The manufacturer name is checked for existence in the all_manufacturers dictionary. When not found, a 
@@ -59,7 +74,16 @@ def main(csv_file: str):
                         # 2. it indirectly includes the new product in the database session, because it is referenced by the manufacturer
                         #    instance which has been explicitly added before. An explicit session.add(p) for the product would not cause any harm, 
                         #    but it isn't necessary. This automatic addition of a child to the session when the parent is already in it is called a cascade.
+                        #
+                        # When the session block ends, all the manufacturers and products that are in the session are saved to the database in a single atomic operation.
                         all_manufacturers[manufacturer].products.append(p)
+                        
+                        for country in countries:
+                            if country not in all_countries:
+                                c= Country(name=country)
+                                session.add(c)
+                                all_countries[country]= c
+                            all_countries[country].products.append(p)
         
     except FileNotFoundError:
         print(f'{csv_file} not found.')

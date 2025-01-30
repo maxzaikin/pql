@@ -24,7 +24,7 @@ class Model(DeclarativeBase):
 # Load db.env file in memory
 load_dotenv(dotenv_path='./db.env')
 
-engine= create_engine(os.getenv('DATABASE_URL'),echo=True) # echo=True - way to spy on the database activity
+engine= create_engine(os.getenv('DATABASE_URL'), echo=True) # echo=True - way to spy on the database activity
 
 # Session objects are available only for applications that use the ORM module.
 # When using Core, database transactions have to be manually managed by issuing
