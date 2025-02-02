@@ -59,6 +59,8 @@ class Product(Model):
     
     reviews: WriteOnlyMapped['ProductReview']= relationship(back_populates='product')
     
+    blog_articles: WriteOnlyMapped['BlogArticle']= relationship(back_populates='product')
+    
     def __repr__(self):
         return f'Product({self.id}, "{self.name}")'
     
@@ -113,6 +115,12 @@ class Customer(Model):
     
     product_reviews: WriteOnlyMapped['ProductReview']= relationship(back_populates='customer')
     
+    # relationship between customers and blog users is defined as a one-to-many, this is because  person will not always be represented by a single blog user in the
+    # RetroFun database. For example, when an anonymous visitor opens the website on their phone and later on their laptop, there will be two different blog users
+    # created. If later this user makes a purchase and becomes a customer, the intention is that eventually this customer will be linked to both blog users, so
+    # that their behavior both on the phone and the laptop can be analyzed.
+    blog_users:WriteOnlyMapped['BlogUser']= relationship(back_populates='customer')
+    
     def __repr__(self):
         return f'Customer({self.id.hex}, "{self.name}")'
     
@@ -143,3 +151,102 @@ class ProductReview(Model):
     product: Mapped['Product']= relationship(back_populates='reviews')
     
     customer: Mapped['Customer']= relationship(back_populates='product_reviews')
+    
+class BlogArticle(Model):
+    __tablename__='blog_articles'
+    
+    id: Mapped[int]= mapped_column(primary_key=True)
+    title: Mapped[str]= mapped_column(String(128), index=True)    
+    
+    author_id: Mapped[int]= mapped_column(ForeignKey('blog_authors.id'), index=True)
+    
+    product_id: Mapped[Optional[int]]= mapped_column(ForeignKey('products.id'), index=True)
+    
+    language_id: Mapped[Optional[int]]= mapped_column(ForeignKey('languages.id'), index=True)
+    
+    # self-referential relationships additional configuration. translation_of_id - referencing to the primary key in the same table
+    translation_of_id: Mapped[Optional[int]]= mapped_column(ForeignKey('blog_articles.id'), index=True)
+    
+    timestamp: Mapped[datetime]= mapped_column(default=datetime.utcnow, index=True)
+    
+    author: Mapped['BlogAuthor']= relationship(back_populates='articles')
+    
+    # optional, meaning that a blog article is not required to be linked to a product.
+    product: Mapped[Optional['Product']]= relationship(back_populates='blog_articles')
+    
+    views: WriteOnlyMapped['BlogView']= relationship(back_populates='article')
+    
+    language: Mapped[Optional['Language']]= relationship(back_populates='blog_articles')
+    
+    # self-referential relationships additional configuration. remote_side argument is  references the "one" side to remove the ambiguity
+    translation_of: Mapped[Optional['BlogArticle']]= relationship(remote_side=id, back_populates='translations')
+    # self-referential relationships additional configuration. "many" side.
+    translations: Mapped[list['BlogArticle']]= relationship(back_populates='translation_of')
+    
+    def __repr__(self):
+        return f'BlogArticle({self.id}, "{self.title}")'
+    
+class BlogAuthor(Model):
+    __tablename__='blog_authors'
+    
+    id: Mapped[int]= mapped_column(primary_key=True)
+    name: Mapped[str]= mapped_column(String(64), index=True)
+    
+    articles: WriteOnlyMapped['BlogArticle']= relationship(back_populates='author')
+    
+    def __repr__(self):
+        return f'BlogAuthor({self.id}, "{self.name}")'
+    
+class BlogUser(Model):
+    __tablename__= 'blog_users'
+    # user_id use UUID primary keys, because in a web application it may be stored in cookies that may be potentially visible to visitors.
+    # using auto-incrementing numeric identifiers is not recommended in cases where public exposure may give away the size of the underlying database tables.
+    id: Mapped[UUID]= mapped_column(default=uuid4, primary_key=True)
+    
+    # defined as optional, because many blog users will not be customers.
+    customer_id: Mapped[Optional[UUID]]= mapped_column(ForeignKey('customers.id'), index=True)
+    customer: Mapped[Optional['Customer']]= relationship(back_populates='blog_users')
+    sessions: WriteOnlyMapped['BlogSession']= relationship(back_populates='user')
+    
+    def __repr__(self):
+        return f'BlogUser({self.id.hex})'
+    
+class BlogSession(Model):
+    __tablename__='blog_sessions'
+    # session_id use UUID primary keys, because in a web application it may be stored in cookies that may be potentially visible to visitors.
+    # using auto-incrementing numeric identifiers is not recommended in cases where public exposure may give away the size of the underlying database tables.
+    id: Mapped[UUID]= mapped_column(default=uuid4, primary_key=True)
+    user_id: Mapped[UUID]= mapped_column(ForeignKey('blog_users.id'), index=True)
+    user: Mapped['BlogUser']= relationship(back_populates='sessions')
+    
+    views: WriteOnlyMapped['BlogView']= relationship(back_populates='session')
+    
+    def __repr__(self):
+        return f'BlogSession({self.id.hex})'
+    
+
+# create an association between blog articles and sessions, which would record which articles were viewed under a session by a user, so in
+# simpler words, a table that record page views. The RetroFun website would insert an entry into this table whenever a blog user visits a blog article. Thinking
+# about this new table, it is clear that it is a join table for a many-to-many relationship between articles and sessions, because an article can be viewed in
+# many sessions, and a session can have many articles viewed.
+class BlogView(Model):
+    __tablename__='blog_views'
+    
+    id: Mapped[int]= mapped_column(primary_key=True)
+    article_id: Mapped[int]= mapped_column(ForeignKey('blog_articles.id'))
+    session_id: Mapped[UUID]= mapped_column(ForeignKey('blog_sessions.id'))
+    timestamp: Mapped[datetime]= mapped_column(default=datetime.utcnow, index=True)
+    
+    article: Mapped['BlogArticle']= relationship(back_populates='views')
+    session: Mapped['BlogSession']= relationship(back_populates='views')
+    
+class Language(Model):
+    __tablename__='languages'
+    
+    id: Mapped[int]= mapped_column(primary_key=True)
+    name: Mapped[str]= mapped_column(String(32), index=True, unique=True)
+    
+    blog_articles: WriteOnlyMapped['BlogArticle']= relationship(back_populates='language')
+    
+    def __repr__(self):
+        return f'Language({self.id}, "{self.name}")'

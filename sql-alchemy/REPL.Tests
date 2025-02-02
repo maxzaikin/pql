@@ -23,3 +23,12 @@ many-to-many order creation example
 UUID('a73c6aad-8ba9-4550-ac2f-1fcc9285cddc')
 >>> o.timestamp
 datetime.datetime(2023, 2, 24, 19, 52, 47, 293727)
+
+# calculates total page views in November 2022
+>>> q= select(func.count(BlogView.id)).where(BlogView.timestamp.between(datetime(2022,11,1),datetime(2022,12,1)))
+>>> session.scalar(q)
+
+# shows the ranking of blog articles from most to least viewed, also for the month of November 2022
+>>> q= (select(BlogArticle.title, page_views).join(BlogArticle.views).where(BlogView.timestamp.between(datetime(2022,11,1), datetime(2022,12,1))).group_by(BlogArticle).order_by(page_views.desc(),BlogArticle.title))
+>>> session.execute(q).all()
+
